@@ -1,4 +1,4 @@
-package app
+package handlers
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/maya-florenko/spotis/internal/spotify"
 )
 
-func Handler(ctx context.Context, b *bot.Bot, u *models.Update) {
+func InlineHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
 	if u.InlineQuery == nil {
 		return
 	}
