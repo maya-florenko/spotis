@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"github.com/maya-florenko/spotis/internal/spotify"
 )
 
 func Handler(ctx context.Context, b *bot.Bot, u *models.Update) {
@@ -12,15 +13,25 @@ func Handler(ctx context.Context, b *bot.Bot, u *models.Update) {
 		return
 	}
 
+	res, err := spotify.Get(ctx, u.InlineQuery.Query)
+	if err != nil {
+		return
+	}
+
 	results := []models.InlineQueryResult{
-		&models.InlineQueryResultArticle{ID: "1", Title: "Foo 1", InputMessageContent: &models.InputTextMessageContent{MessageText: "foo 1"}},
-		&models.InlineQueryResultArticle{ID: "2", Title: "Foo 2", InputMessageContent: &models.InputTextMessageContent{MessageText: "foo 2"}},
-		&models.InlineQueryResultArticle{ID: "4", Title: "Foo 4", InputMessageContent: &models.InputTextMessageContent{MessageText: "foo 4"}},
+		&models.InlineQueryResultArticle{
+			ID:    "1",
+			Title: res.Artists[0].Name + " - " + res.Name,
+			InputMessageContent: &models.InputTextMessageContent{
+				MessageText: res.Artists[0].Name + " - " + res.Name,
+			},
+			ThumbnailURL: res.Album.Images[0].URL,
+		},
 	}
 
 	b.AnswerInlineQuery(ctx, &bot.AnswerInlineQueryParams{
 		InlineQueryID: u.InlineQuery.ID,
-		CacheTime:     0,
 		Results:       results,
+		CacheTime:     0,
 	})
 }
