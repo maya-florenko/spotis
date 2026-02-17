@@ -1,6 +1,8 @@
 module github.com/maya-florenko/spotis
 
-go 1.26.0
+go 1.24.0
+
+toolchain go1.24.7
 
 require (
 	github.com/go-telegram/bot v1.18.0

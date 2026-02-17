@@ -6,9 +6,16 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"github.com/maya-florenko/spotis/internal/downloader"
 )
 
+var downloadManager *downloader.Manager
+
 func Init(ctx context.Context) error {
+	// Initialize download manager with available downloaders
+	downloadManager = downloader.NewManager()
+	downloadManager.Register(downloader.NewDeezerDownloaderFromEnv())
+
 	opts := []bot.Option{
 		bot.WithDefaultHandler(handler),
 		bot.WithMessageTextHandler("/start", bot.MatchTypeExact, CommandStart),

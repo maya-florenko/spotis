@@ -3,13 +3,14 @@ package app
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"github.com/maya-florenko/spotis/internal/deezer"
+	"github.com/maya-florenko/spotis/internal/metadata"
 	"github.com/maya-florenko/spotis/internal/songlink"
 )
 
@@ -38,24 +39,40 @@ func InlineHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
 }
 
 func download(ctx context.Context, b *bot.Bot, url string) (string, error) {
-	res, err := songlink.GetLink(ctx, url)
+	// Get track information from songlink
+	trackInfo, err := songlink.GetLink(ctx, url)
 	if err != nil {
 		return "", err
 	}
 
-	file, err := deezer.DownloadTrackFromURL(ctx, res.URL)
+	// Download track using the download manager
+	trackData, err := downloadManager.Download(ctx, trackInfo)
 	if err != nil {
 		return "", err
 	}
 
+	// Add metadata to the audio file
+	audioWithMetadata, err := metadata.AddMetadata(trackData.Audio, metadata.Metadata{
+		Title:  trackData.Title,
+		Artist: trackData.Artist,
+		Cover:  trackData.Cover,
+	})
+	if err != nil {
+		// If metadata fails, use original audio
+		fmt.Printf("Warning: failed to add metadata: %v\n", err)
+		audioWithMetadata = trackData.Audio
+	}
+
+	filename := trackData.Artist + " - " + trackData.Title + ".mp3"
 	msg, err := b.SendAudio(ctx, &bot.SendAudioParams{
 		ChatID: os.Getenv("TELEGRAM_CHAT_ID"),
 		Audio: &models.InputFileUpload{
-			Filename: res.Artist + " - " + res.Title,
-			Data:     file,
+			Filename: filename,
+			Data:     audioWithMetadata,
 		},
-		Title:     res.Artist + " - " + res.Title,
-		Thumbnail: cover(ctx, res.Cover),
+		Title:     trackData.Title,
+		Performer: trackData.Artist,
+		Thumbnail: cover(ctx, trackData.Cover),
 	})
 	if err != nil {
 		return "", err
