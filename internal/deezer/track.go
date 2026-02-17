@@ -15,8 +15,8 @@ type song struct {
 	TrackToken string `json:"TRACK_TOKEN"`
 }
 
-func fetchTrack(ctx context.Context, s *session, trackID string) (*song, error) {
-	body, _ := json.Marshal(map[string]any{"sng_id": trackID})
+func fetchTrack(ctx context.Context, s *session, id string) (*song, error) {
+	body, _ := json.Marshal(map[string]any{"sng_id": id})
 	url := fmt.Sprintf("https://www.deezer.com/ajax/gw-light.php?method=deezer.pageTrack&input=3&api_version=1.0&api_token=%s", s.apiToken)
 
 	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))

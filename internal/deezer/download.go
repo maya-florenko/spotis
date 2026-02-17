@@ -17,8 +17,8 @@ const chunkSize = 2048
 
 var iv = []byte{0, 1, 2, 3, 4, 5, 6, 7}
 
-func DownloadTrackFromURL(ctx context.Context, trackURL string) (*bytes.Buffer, error) {
-	trackID := extractTrackID(trackURL)
+func DownloadTrackFromURL(ctx context.Context, url string) (*bytes.Buffer, error) {
+	trackID := extractTrackID(url)
 
 	s, err := authenticate(ctx, os.Getenv("DEEZER_ARL"))
 	if err != nil {
@@ -86,8 +86,8 @@ func downloadTrack(ctx context.Context, s *session, url string, track *song) (*b
 	return buf, nil
 }
 
-func decryptionKey(secret, songID string) []byte {
-	hash := md5.Sum([]byte(songID))
+func decryptionKey(secret, id string) []byte {
+	hash := md5.Sum([]byte(id))
 	hex := fmt.Sprintf("%x", hash)
 
 	key := []byte(secret)
