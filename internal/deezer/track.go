@@ -56,13 +56,13 @@ func FetchTrack(ctx context.Context, session *Session, trackID string) (*Song, e
 	url := fmt.Sprintf("https://www.deezer.com/ajax/gw-light.php?method=deezer.pageTrack&input=3&api_version=1.0&api_token=%s", session.APIToken)
 
 	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	resp, err := session.Client.Do(req)
+	res, err := session.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(res.Body)
 
 	var track TrackResponse
 	json.Unmarshal(body, &track)
@@ -80,13 +80,13 @@ func FetchMediaURL(ctx context.Context, session *Session, song *Song, quality st
 		session.LicenseToken, formats, song.TrackToken)
 
 	req, _ := http.NewRequestWithContext(ctx, "POST", "https://media.deezer.com/v1/get_url", bytes.NewBuffer([]byte(reqBody)))
-	resp, err := session.Client.Do(req)
+	res, err := session.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(res.Body)
 
 	var media Media
 	json.Unmarshal(body, &media)

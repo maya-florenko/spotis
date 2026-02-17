@@ -14,6 +14,11 @@ func MessageHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
 		return
 	}
 
+	b.SendChatAction(ctx, &bot.SendChatActionParams{
+		ChatID: u.Message.Chat.ID,
+		Action: models.ChatActionRecordVoice,
+	})
+
 	res, err := songlink.GetLink(ctx, u.Message.Text)
 	if err != nil {
 		return
@@ -26,6 +31,11 @@ func MessageHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
 			Text:   err.Error(),
 		})
 	}
+
+	b.SendChatAction(ctx, &bot.SendChatActionParams{
+		ChatID: u.Message.Chat.ID,
+		Action: models.ChatActionUploadVoice,
+	})
 
 	b.SendAudio(ctx, &bot.SendAudioParams{
 		ChatID: u.Message.Chat.ID,
