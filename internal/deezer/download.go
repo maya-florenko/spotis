@@ -13,44 +13,35 @@ import (
 	"golang.org/x/crypto/blowfish"
 )
 
-const (
-	chunkSize = 2048
-	quality   = "MP3_128"
-)
+const chunkSize = 2048
 
-var iv = []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07}
+var iv = []byte{0, 1, 2, 3, 4, 5, 6, 7}
 
-func GetDecryptionKey(secret, songID string) []byte {
-	hash := md5.Sum([]byte(songID))
-	hashHex := fmt.Sprintf("%x", hash)
+func DownloadTrackFromURL(ctx context.Context, trackURL string) (*bytes.Buffer, error) {
+	trackID := extractTrackID(trackURL)
 
-	key := []byte(secret)
-	for i := 0; i < len(hash); i++ {
-		key[i] = key[i] ^ hashHex[i] ^ hashHex[i+16]
-	}
-
-	return key
-}
-
-func Decrypt(data, key []byte) ([]byte, error) {
-	block, err := blowfish.NewCipher(key)
+	s, err := authenticate(ctx, os.Getenv("DEEZER_ARL"))
 	if err != nil {
 		return nil, err
 	}
 
-	mode := cipher.NewCBCDecrypter(block, iv)
-	decrypted := make([]byte, len(data))
-	mode.CryptBlocks(decrypted, data)
+	track, err := fetchTrack(ctx, s, trackID)
+	if err != nil {
+		return nil, err
+	}
 
-	return decrypted, nil
+	mediaURL, err := fetchMediaURL(ctx, s, track)
+	if err != nil {
+		return nil, err
+	}
+
+	return downloadTrack(ctx, s, mediaURL, track)
 }
 
-func DownloadTrack(ctx context.Context, session *Session, trackURL string, song *Song) (*bytes.Buffer, error) {
-	req, _ := http.NewRequestWithContext(ctx, "GET", trackURL, nil)
+func downloadTrack(ctx context.Context, s *session, url string, track *song) (*bytes.Buffer, error) {
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 
-	streamingClient := *session.Client
-
-	res, err := streamingClient.Do(req)
+	res, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -60,81 +51,63 @@ func DownloadTrack(ctx context.Context, session *Session, trackURL string, song 
 		return nil, fmt.Errorf("bad status: %d", res.StatusCode)
 	}
 
-	key := GetDecryptionKey(os.Getenv("DEEZER_SECRET"), song.ID)
-	buffer := make([]byte, chunkSize)
-	chunkIndex := 0
-
+	key := decryptionKey(os.Getenv("DEEZER_SECRET"), track.ID)
+	chunk := make([]byte, chunkSize)
 	buf := new(bytes.Buffer)
 
-	for {
+	for i := 0; ; i++ {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
 		}
 
-		n, err := io.ReadFull(res.Body, buffer)
-		isEOF := false
-
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			if err == io.ErrUnexpectedEOF {
-				isEOF = true
+		n, err := io.ReadFull(res.Body, chunk)
+		if n > 0 {
+			if i%3 == 0 && n == chunkSize {
+				dec, decErr := decrypt(chunk, key)
+				if decErr != nil {
+					return nil, decErr
+				}
+				buf.Write(dec)
 			} else {
-				return nil, err
+				buf.Write(chunk[:n])
 			}
 		}
 
-		if n == 0 {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			break
 		}
-
-		if chunkIndex%3 == 0 && n == chunkSize {
-			decrypted, err := Decrypt(buffer[:n], key)
-			if err != nil {
-				return nil, err
-			}
-			buf.Write(decrypted)
-		} else {
-			buf.Write(buffer[:n])
+		if err != nil {
+			return nil, err
 		}
-
-		if isEOF {
-			break
-		}
-
-		chunkIndex++
 	}
 
 	return buf, nil
 }
 
-func DownloadTrackFromURL(ctx context.Context, url string) (*bytes.Buffer, error) {
-	trackID := extractTrackID(url)
+func decryptionKey(secret, songID string) []byte {
+	hash := md5.Sum([]byte(songID))
+	hex := fmt.Sprintf("%x", hash)
 
-	session, err := Authenticate(ctx, os.Getenv("DEEZER_ARL"))
+	key := []byte(secret)
+	for i := range hash {
+		key[i] ^= hex[i] ^ hex[i+16]
+	}
+
+	return key
+}
+
+func decrypt(data, key []byte) ([]byte, error) {
+	block, err := blowfish.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
 
-	song, err := FetchTrack(ctx, session, trackID)
-	if err != nil {
-		return nil, err
-	}
+	out := make([]byte, len(data))
+	cipher.NewCBCDecrypter(block, iv).CryptBlocks(out, data)
 
-	media, err := FetchMediaURL(ctx, session, song, quality)
-	if err != nil {
-		return nil, err
-	}
-
-	buf, err := DownloadTrack(ctx, session, media.GetURL(), song)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf, nil
+	return out, nil
 }
 
 func extractTrackID(url string) string {
