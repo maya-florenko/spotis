@@ -5,107 +5,88 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 )
 
-type Song struct {
+const quality = "MP3_128"
+
+type song struct {
 	ID         string `json:"SNG_ID"`
-	Artist     string `json:"ART_NAME"`
-	Title      string `json:"SNG_TITLE"`
-	Version    string `json:"VERSION"`
-	Cover      string `json:"ALB_PICTURE"`
 	TrackToken string `json:"TRACK_TOKEN"`
-	Duration   string `json:"DURATION"`
 }
 
-type TrackResponse struct {
-	Results struct {
-		Data *Song `json:"DATA"`
-	} `json:"results"`
-}
+func fetchTrack(ctx context.Context, s *session, trackID string) (*song, error) {
+	body, _ := json.Marshal(map[string]any{"sng_id": trackID})
+	url := fmt.Sprintf("https://www.deezer.com/ajax/gw-light.php?method=deezer.pageTrack&input=3&api_version=1.0&api_token=%s", s.apiToken)
 
-type Media struct {
-	Data []struct {
-		Media []struct {
-			Format  string `json:"format"`
-			Sources []struct {
-				URL string `json:"url"`
-			} `json:"sources"`
-		} `json:"media"`
-		Errors []struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"errors"`
-	} `json:"data"`
-	Errors []struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
-func FetchTrack(ctx context.Context, session *Session, trackID string) (*Song, error) {
-	payload := map[string]any{
-		"sng_id": trackID,
-		"nb":     10000,
-		"start":  0,
-		"lang":   "en",
-	}
-
-	jsonData, _ := json.Marshal(payload)
-	url := fmt.Sprintf("https://www.deezer.com/ajax/gw-light.php?method=deezer.pageTrack&input=3&api_version=1.0&api_token=%s", session.APIToken)
-
-	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	res, err := session.Client.Do(req)
+	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	res, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
 
-	body, _ := io.ReadAll(res.Body)
+	var resp struct {
+		Results struct {
+			Data *song `json:"DATA"`
+		} `json:"results"`
+	}
 
-	var track TrackResponse
-	json.Unmarshal(body, &track)
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return nil, err
+	}
 
-	if track.Results.Data == nil {
+	if resp.Results.Data == nil {
 		return nil, fmt.Errorf("track not found")
 	}
 
-	return track.Results.Data, nil
+	return resp.Results.Data, nil
 }
 
-func FetchMediaURL(ctx context.Context, session *Session, song *Song, quality string) (*Media, error) {
-	formats := fmt.Sprintf(`[{"cipher":"BF_CBC_STRIPE","format":"%s"}]`, quality)
-	reqBody := fmt.Sprintf(`{"license_token":"%s","media":[{"type":"FULL","formats":%s}],"track_tokens":["%s"]}`,
-		session.LicenseToken, formats, song.TrackToken)
+func fetchMediaURL(ctx context.Context, s *session, track *song) (string, error) {
+	body, _ := json.Marshal(map[string]any{
+		"license_token": s.licenseToken,
+		"media": []map[string]any{{
+			"type":    "FULL",
+			"formats": []map[string]string{{"cipher": "BF_CBC_STRIPE", "format": quality}},
+		}},
+		"track_tokens": []string{track.TrackToken},
+	})
 
-	req, _ := http.NewRequestWithContext(ctx, "POST", "https://media.deezer.com/v1/get_url", bytes.NewBuffer([]byte(reqBody)))
-	res, err := session.Client.Do(req)
+	req, _ := http.NewRequestWithContext(ctx, "POST", "https://media.deezer.com/v1/get_url", bytes.NewReader(body))
+	res, err := s.client.Do(req)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer res.Body.Close()
 
-	body, _ := io.ReadAll(res.Body)
-
-	var media Media
-	json.Unmarshal(body, &media)
-
-	if len(media.Errors) > 0 {
-		return nil, fmt.Errorf("error: %s", media.Errors[0].Message)
+	var resp struct {
+		Data []struct {
+			Media []struct {
+				Sources []struct {
+					URL string `json:"url"`
+				} `json:"sources"`
+			} `json:"media"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 	}
 
-	if len(media.Data[0].Errors) > 0 {
-		return nil, fmt.Errorf("error: %s", media.Data[0].Errors[0].Message)
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return "", err
 	}
 
-	return &media, nil
-}
+	if len(resp.Errors) > 0 {
+		return "", fmt.Errorf("media error: %s", resp.Errors[0].Message)
+	}
 
-func (m *Media) GetURL() string {
-	return m.Data[0].Media[0].Sources[0].URL
-}
+	if len(resp.Data[0].Errors) > 0 {
+		return "", fmt.Errorf("media error: %s", resp.Data[0].Errors[0].Message)
+	}
 
-func (m *Media) GetFormat() string {
-	return m.Data[0].Media[0].Format
+	return resp.Data[0].Media[0].Sources[0].URL, nil
 }
