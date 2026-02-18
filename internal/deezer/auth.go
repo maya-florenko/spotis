@@ -19,7 +19,10 @@ func authenticate(ctx context.Context, arl string) (*session, error) {
 	jar, _ := cookiejar.New(nil)
 	c := &http.Client{Timeout: 20 * time.Second, Jar: jar}
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", "https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token=", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token=", nil)
+	if err != nil {
+		return nil, err
+	}
 	req.AddCookie(&http.Cookie{Name: "arl", Value: arl})
 
 	res, err := c.Do(req)

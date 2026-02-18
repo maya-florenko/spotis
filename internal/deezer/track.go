@@ -19,7 +19,11 @@ func fetchTrack(ctx context.Context, s *session, id string) (*song, error) {
 	body, _ := json.Marshal(map[string]any{"sng_id": id})
 	url := fmt.Sprintf("https://www.deezer.com/ajax/gw-light.php?method=deezer.pageTrack&input=3&api_version=1.0&api_token=%s", s.apiToken)
 
-	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
 	res, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -53,7 +57,11 @@ func fetchMediaURL(ctx context.Context, s *session, track *song) (string, error)
 		"track_tokens": []string{track.TrackToken},
 	})
 
-	req, _ := http.NewRequestWithContext(ctx, "POST", "https://media.deezer.com/v1/get_url", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://media.deezer.com/v1/get_url", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+
 	res, err := s.client.Do(req)
 	if err != nil {
 		return "", err
@@ -84,8 +92,17 @@ func fetchMediaURL(ctx context.Context, s *session, track *song) (string, error)
 		return "", fmt.Errorf("media error: %s", resp.Errors[0].Message)
 	}
 
+	if len(resp.Data) == 0 {
+		return "", fmt.Errorf("media error: empty response data")
+	}
 	if len(resp.Data[0].Errors) > 0 {
 		return "", fmt.Errorf("media error: %s", resp.Data[0].Errors[0].Message)
+	}
+	if len(resp.Data[0].Media) == 0 {
+		return "", fmt.Errorf("media error: no media sources")
+	}
+	if len(resp.Data[0].Media[0].Sources) == 0 {
+		return "", fmt.Errorf("media error: no media URLs")
 	}
 
 	return resp.Data[0].Media[0].Sources[0].URL, nil
