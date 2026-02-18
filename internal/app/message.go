@@ -30,6 +30,7 @@ func MessageHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
 			ChatID: u.Message.Chat.ID,
 			Text:   err.Error(),
 		})
+		return
 	}
 
 	b.SendChatAction(ctx, &bot.SendChatActionParams{
